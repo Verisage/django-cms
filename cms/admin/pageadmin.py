@@ -18,6 +18,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
 from django.core.exceptions import (ObjectDoesNotExist,
                                     PermissionDenied, ValidationError)
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db import router, transaction
 from django.db.models import Q, Prefetch
 from django.http import (
@@ -1456,9 +1457,22 @@ class BasePageAdmin(PlaceholderAdminMixin, admin.ModelAdmin):
                 queryset=Title.objects.filter(language__in=get_language_list(site.pk))
             ),
         )
+
+        OBJECTS_PER_PAGE = 25
+        paginator = Paginator(pages, OBJECTS_PER_PAGE)
+        page_num = request.GET.get('page')
+        try:
+            qs_page = paginator.page(page_num)
+        except PageNotAnInteger:
+            # If page is not an integer, deliver first page.
+            qs_page = paginator.page(1)
+        except EmptyPage:
+            # If page is out of range (e.g. 9999), deliver last page of results.
+            qs_page = paginator.page(paginator.num_pages)
+
         rows = self.get_tree_rows(
             request,
-            pages=pages,
+            pages=qs_page.object_list,
             language=get_site_language_from_request(request, site_id=site.pk),
             depth=(page.node.depth + 1 if page else 1),
             follow_descendants=True,
