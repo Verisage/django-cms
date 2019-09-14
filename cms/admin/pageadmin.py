@@ -198,8 +198,17 @@ class BasePageAdmin(PlaceholderAdminMixin, admin.ModelAdmin):
             pat(r'^([0-9]+)/([a-z\-]+)/preview/$', self.preview_page),
             pat(r'^([0-9]+)/([a-z\-]+)/revert-to-live/$', self.revert_to_live),
             pat(r'^get-tree/$', self.get_tree),
+            pat(r'test/get-tree/$', self.debug_get_tree),
         ]
         return url_patterns + super(BasePageAdmin, self).get_urls()
+
+    def debug_get_tree(self, request):
+        response = self.get_tree(request)
+        return render(request, 'admin/cms/page/debug.html', {
+            'request': request,
+            'response': response,
+            'response_content': response.content.decode("utf-8"),
+        })
 
     def _send_pre_page_operation(self, request, operation, **kwargs):
         token = str(uuid.uuid4())

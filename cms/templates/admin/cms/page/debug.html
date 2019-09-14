@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body>
+<h1><code>get_tree</code> Request</h1>
+{{request.path_info}}
+
+Parameters:
+<ul>
+{% for key, value in request.GET.items %}
+    <li>{{key}}: {{value}}</li>
+{% endfor %}
+</ul>
+
+<h1><code>get_tree</code> Response</h1>
+Status Code: {{response.status_code}}
+<code><pre>
+{{response_content}}
+</pre></code>
+</body>
+</html>
