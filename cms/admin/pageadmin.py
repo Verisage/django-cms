@@ -4,6 +4,7 @@ import copy
 import json
 import sys
 import uuid
+import logging
 
 
 import django
@@ -80,6 +81,7 @@ from cms.utils.urlutils import admin_reverse
 
 require_POST = method_decorator(require_POST)
 
+logger = logging.getLogger(__name__)
 
 PUBLISH_COMMENT = "Publish"
 
@@ -179,6 +181,7 @@ class BasePageAdmin(PlaceholderAdminMixin, admin.ModelAdmin):
         pat = lambda regex, fn: url(regex, self.admin_site.admin_view(fn), name='%s_%s' % (info, fn.__name__))
 
         url_patterns = [
+            pat(r'^([0-9]+)/prototype/$', self.prototype),
             pat(r'^([0-9]+)/advanced-settings/$', self.advanced),
             pat(r'^([0-9]+)/duplicate/$', self.duplicate),
             pat(r'^([0-9]+)/actions-menu/$', self.actions_menu),
@@ -299,6 +302,73 @@ class BasePageAdmin(PlaceholderAdminMixin, admin.ModelAdmin):
             request.GET = request.GET.copy()
             request.GET['source'] = page.pk
         return self.add_view(request)
+
+    def prototype(self, request, object_id):
+        page = self.get_object(request, object_id=object_id)
+
+        if page is None:
+            raise self._get_404_exception(object_id)
+
+        site = self.get_site(request)
+
+        # node_id = request.GET.get('nodeId')
+        # open_nodes = list(map(int, request.GET.getlist('openNodes[]')))
+
+        # children = page.get_descendant_pages()
+        children = page.get_descendant_pages().filter(node__parent=page.node)
+        # print(f'children: {children}')
+        # if node_id:
+        #     page = get_object_or_404(pages, node_id=int(node_id))
+        #     pages = page.get_descendant_pages().filter(Q(node__in=open_nodes)|Q(node__parent__in=open_nodes))
+        # else:
+        #     page = None
+        #     pages = pages.filter(
+        #         # get all root nodes
+        #         Q(node__depth=1)
+        #         # or children which were previously open
+        #         | Q(node__depth=2, node__in=open_nodes)
+        #         # or children of the open descendants
+        #         | Q(node__parent__in=open_nodes)
+        #     )
+        children = children.prefetch_related(
+            Prefetch(
+                'title_set',
+                to_attr='filtered_translations',
+                queryset=Title.objects.filter(language__in=get_language_list(site.pk))
+            ),
+        )
+        rows = None
+        # rows = self.get_tree_rows(
+        #     request,
+        #     pages=children,
+        #     language=get_site_language_from_request(request, site_id=site.pk),
+        #     depth=(page.node.depth + 1 if page else 1),
+        #     follow_descendants=True,
+        # )
+
+        OBJECTS_PER_PAGE = 25
+        paginator = Paginator(children, OBJECTS_PER_PAGE)
+        page_num = request.GET.get('page')
+        try:
+            qs_page = paginator.page(page_num)
+        except PageNotAnInteger:
+            # If page is not an integer, deliver first page.
+            qs_page = paginator.page(1)
+        except EmptyPage:
+            # If page is out of range (e.g. 9999), deliver last page of results.
+            qs_page = paginator.page(paginator.num_pages)
+
+        context = dict(
+            opts=self.opts,
+            page=page,
+            # children=children,
+            children=qs_page.object_list,
+            qs_page=qs_page,
+            paginator=paginator,
+            rows=rows if rows else None,
+        )
+
+        return TemplateResponse(request, 'admin/cms/page/tree/prototype.html', context)
 
     def advanced(self, request, object_id):
         page = self.get_object(request, object_id=object_id)
